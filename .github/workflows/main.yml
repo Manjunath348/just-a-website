@@ -1,28 +1,37 @@
-name: Simple  for Static Files
+name: Deploy Static Files to EC2
 
 on:
   push:
     branches: ["main"]
 
 jobs:
-  build:
+  deploy-static:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout Code
+      uses: actions/checkout@v3
 
-      - name: Prepare deployment folder
-        run: |
-          mkdir deploy
-          cp index.html deploy/
-          cp onboarding.js deploy/
-          cp Sample_Table.html deploy/
-          cp test.js deploy/
-          # Add extra files here if needed
+    - name: Prepare Static Files
+      run: |
+        rm -rf deploy
+        mkdir deploy
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: multiplus-static-files
-          path: deploy/
+        cp index.html deploy/ || true
+        cp onboarding.js deploy/ || true
+        cp test.js deploy/ || true
+
+        echo "Static files prepared:"
+        ls -l deploy
+
+    - name: Copy Files to EC2 using SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: 3.110.154.138
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "deploy/*"
+        target: "/var/www/html"
+
+    - name: Print Website URL
+      run: echo "Website Live at: http://3.110.154.138/"
