@@ -7,7 +7,50 @@ on:
     branches: ["main"]
 
 jobs:
+  deploy:name: Deploy Static Site to EC2 (Self-Hosted Runner)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
   deploy:
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Prepare Static Files
+      run: |
+        rm -rf deploy
+        mkdir deploy
+
+        cp index.html deploy/ || true
+        cp onboarding.js deploy/ || true
+        cp test.js deploy/ || true
+
+        echo "Prepared files:"
+        ls -l deploy
+
+    - name: Add EC2 to Known Hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H 3.110.154.138 >> ~/.ssh/known_hosts
+
+    - name: Copy Files to EC2 via SCP (NO S3, NO SSM)
+      run: |
+        scp \
+          -i /home/<RUNNER-USER>/.ssh/id_ed25519 \
+          -o StrictHostKeyChecking=no \
+          deploy/* \
+          ubuntu@3.110.154.138:/var/www/html/
+
+    - name: Print URL
+      run: echo "Site Live: http://3.110.154.138/"
+
     runs-on: self-hosted
 
     steps:
