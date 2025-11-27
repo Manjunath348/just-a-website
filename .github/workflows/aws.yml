@@ -1,4 +1,4 @@
-name: Deploy Static Site to EC2 (No SSH)
+name: Deploy Static Site to EC2 (Self-Hosted Runner)
 
 on:
   push:
@@ -8,46 +8,36 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Install Node (optional if no build step)
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
-
-    - name: Build Project (Optional)
+    - name: Prepare Static Files
       run: |
-        echo "No build needed for pure HTML/JS"
-        # Add build commands here if required
+        rm -rf deploy
+        mkdir deploy
 
-    - name: Run Tests (Optional)
+        cp index.html deploy/ || true
+        cp onboarding.js deploy/ || true
+        cp test.js deploy/ || true
+
+        echo "Prepared files:"
+        ls -l deploy
+
+    - name: Add EC2 to Known Hosts
       run: |
-        echo "Add JS tests here if needed"
+        mkdir -p ~/.ssh
+        ssh-keyscan -H 3.110.154.138 >> ~/.ssh/known_hosts
 
-    - name: Zip Artifact
+    - name: Copy Files to EC2 via SCP (NO S3, NO SSM)
       run: |
-        zip -r site.zip index.html Sample_Table.html *.js
+        scp \
+          -i /home/<RUNNER-USER>/.ssh/id_ed25519 \
+          -o StrictHostKeyChecking=no \
+          deploy/* \
+          ubuntu@3.110.154.138:/var/www/html/
 
-
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: "ap-south-1"
-
-    - name: Deploy to EC2 using SSM (NO SSH)
-      run: |
-        aws ssm send-command \
-          --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
-          --document-name "AWS-RunShellScript" \
-          --comment "Deploy HTML/JS site" \
-          --parameters commands="sudo aws s3 cp s3://${{ secrets.S3_BUCKET }}/site.zip /tmp/site.zip; sudo unzip -o /tmp/site.zip -d /var/www/html/" \
-          --output text
-
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: "ap-south-1"
+    - name: Print URL
+      run: echo "Site Live: http://3.110.154.138/"
