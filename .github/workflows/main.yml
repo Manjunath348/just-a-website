@@ -18,12 +18,9 @@ jobs:
       run: |
         rm -rf deploy
         mkdir deploy
-
         cp index.html deploy/ || true
         cp onboarding.js deploy/ || true
         cp test.js deploy/ || true
-
-        echo "Prepared files:"
         ls -l deploy
 
     - name: Add EC2 to Known Hosts
@@ -39,4 +36,4 @@ jobs:
           ubuntu@3.110.154.138:/var/www/html/
 
     - name: Print URL
-      run: echo "Site Live at: http://3.110.154.138/"
+      run: echo "Site Live at:http://3.110.154.138/"
