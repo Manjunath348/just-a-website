@@ -23,25 +23,5 @@ jobs:
         cp test.js deploy/
         ls -l deploy
 
-    - name: Add EC2 to Known Hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H 3.110.154.138 >> ~/.ssh/known_hosts
-
-    - name: Copy Files to EC2 via SCP
-      run: |
-        scp \
-          -i /home/ubuntu/.ssh/id_ed25519 \
-          deploy/* \
-          ubuntu@15.206.117.5:/var/www/html/
-
-    - name: Reload NGINX on EC2
-      run: |
-        ssh \
-          -i /home/ubuntu/.ssh/id_ed25519 \
-          -o StrictHostKeyChecking=no \    
-          ubuntu@15.206.117.5 \
-          "sudo systemctl reload nginx"
-
     - name: Print URL
       run: echo "Site Live"
