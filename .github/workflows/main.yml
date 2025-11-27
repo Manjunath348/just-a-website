@@ -1,4 +1,4 @@
-name: Simple CI-CD for Static Files
+name: Simple  for Static Files
 
 on:
   push:
