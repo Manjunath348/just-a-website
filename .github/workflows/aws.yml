@@ -24,4 +24,4 @@ jobs:
         ls -l deploy
 
     - name: Print URL
-      run: echo "Site Live"
+      run: echo "Site Live:Success"
