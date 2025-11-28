@@ -1,14 +1,17 @@
-name: Deploy Fullstack (Next.js + Quarkus) to EC2
+name: Build Fullstack (Next.js + Quarkus)
 
 on:
   push:
     branches: ["main"]
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
+    #####################################################
+    # CHECKOUT
+    #####################################################
     - name: Checkout Code
       uses: actions/checkout@v4
 
@@ -28,7 +31,9 @@ jobs:
       run: npm run build
       working-directory: ./frontend
 
+    # Optional: Export if you're using static export (Next.js Out folder)
     - name: Export Static Frontend
+      if: success()
       run: npm run export
       working-directory: ./frontend
 
@@ -44,3 +49,18 @@ jobs:
     - name: Build Quarkus Backend
       run: mvn package -DskipTests
       working-directory: ./backend
+
+    #####################################################
+    # ARTIFACT STORAGE
+    #####################################################
+    - name: Upload Frontend Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: ./frontend/out
+
+    - name: Upload Backend Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-build
+        path: ./backend/target/*.jar
