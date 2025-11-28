@@ -16,7 +16,7 @@ jobs:
       uses: actions/checkout@v4
 
     #####################################################
-    # FRONTEND (Next.js SSR)
+    # FRONTEND (Next.js)
     #####################################################
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -27,22 +27,21 @@ jobs:
       run: |
         npm config set registry https://registry.npmjs.org/
         npm config delete @next:registry || true
-        npm config list
       working-directory: ./frontend
 
     - name: Remove lockfile
       run: |
-       rm -rf node_modules
-       rm -f package-lock.json
+        rm -rf node_modules
+        rm -f package-lock.json
       working-directory: ./frontend
-      
+
     - name: Clear npm cache
       run: npm cache clean --force
 
-    - name: Install Frontend Dependencies
-      working-directory: ./frontend
-    - name: npm install
+    - name: Install Frontend Dependencies (via jaid/action-npm-install)
       uses: jaid/action-npm-install@v1.2.1
+      with:
+        working-directory: ./frontend
 
     - name: Build Frontend
       run: npm run build
@@ -62,7 +61,7 @@ jobs:
       working-directory: ./backend
 
     #####################################################
-    # ARTIFACT STORAGE (OPTIONAL)
+    # ARTIFACT STORAGE
     #####################################################
     - name: Upload Frontend Build
       uses: actions/upload-artifact@v4
