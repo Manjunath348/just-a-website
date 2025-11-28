@@ -39,19 +39,10 @@ jobs:
     - name: Clear npm cache
       run: npm cache clean --force
 
-
-    - name: Fix NPM Registry + Install
-      working-directory: ./frontend
-      run: |
-       npm config set registry https://registry.npmjs.org/
-       npm install next@13.5.0 --force
-       npm install
-
     - name: Install Frontend Dependencies
-      run: |
-        npm config set registry https://registry.npmjs.org/
-        npm install
       working-directory: ./frontend
+    - name: npm install
+      uses: jaid/action-npm-install@v1.2.1
 
     - name: Build Frontend
       run: npm run build
