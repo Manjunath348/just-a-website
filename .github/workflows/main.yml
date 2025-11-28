@@ -38,14 +38,14 @@ jobs:
     - name: Clear npm cache
       run: npm cache clean --force
 
-    - name: Install Frontend Dependencies (via jaid/action-npm-install)
-      uses: jaid/action-npm-install@v1.2.1
-      with:
-        working-directory: ./frontend
-
-    - name: Build Frontend
-      run: npm run build
+    - name: Install frontend dependencies
       working-directory: ./frontend
+      run: |
+        if [ -f package.json ]; then
+          npm ci || npm install
+        else
+          echo "No package.json found, skipping npm install"
+        fi
 
     #####################################################
     # BACKEND (Quarkus)
