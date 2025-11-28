@@ -23,6 +23,13 @@ jobs:
       with:
         node-version: 18
 
+    - name: Reset NPM registry
+      run: |
+        npm config set registry https://registry.npmjs.org/
+        npm config delete @next:registry || true
+        npm config list
+      working-directory: ./frontend
+
     - name: Remove lockfile
       run: rm -f package-lock.json
       working-directory: ./frontend
