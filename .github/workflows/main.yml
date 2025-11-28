@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout Code
@@ -44,33 +44,3 @@ jobs:
     - name: Build Quarkus Backend
       run: mvn package -DskipTests
       working-directory: ./backend
-
-    #####################################################
-    # DEPLOY STATIC SITE + QUARKUS SERVICE
-    #####################################################
-    - name: Add EC2 to Known Hosts
-      run: ssh-keyscan -H 3.110.154.138 >> ~/.ssh/known_hosts
-
-    - name: Deploy Frontend (Static Next.js)
-      run: |
-        scp -i /home/ubuntu/.ssh/id_ed25519 -r \
-          ./frontend/out/* \
-          ubuntu@3.110.154.138:/var/www/html/
-
-    - name: Deploy Backend (Quarkus)
-      run: |
-        scp -i /home/ubuntu/.ssh/id_ed25519 -r \
-          ./backend/target/quarkus-app \
-          ubuntu@3.110.154.138:/opt/backend/
-
-    - name: Restart Backend + Reload NGINX
-      run: |
-        ssh -i /home/ubuntu/.ssh/id_ed25519 ubuntu@3.110.154.138 "
-          sudo systemctl restart backend || true
-          sudo systemctl reload nginx
-        "
-
-    - name: Print URLs
-      run: |
-        echo "Frontend: http://3.110.154.138/"
-        echo "Backend:  http://3.110.154.138:8080/hello"
