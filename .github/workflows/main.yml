@@ -80,6 +80,12 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Run Frontend Server
+        working-directory: ./frontend
+        run: |
+          nohup npm run start > frontend.log 2>&1 &
+
+
   # Backend Build and Test (Java Quarkus)
   backend-ci:
     name: Backend CI (Java Quarkus)
@@ -116,6 +122,12 @@ jobs:
           name: backend-build
           path: backend/target/
           retention-days: 7
+
+      - name: Run Backend
+        working-directory: ./backend/target
+        run: |
+          nohup java -jar *.jar > backend.log 2>&1 &
+
 
   # Docker Build and Push
   docker-build:
