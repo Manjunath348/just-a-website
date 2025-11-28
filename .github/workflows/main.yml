@@ -16,7 +16,7 @@ jobs:
       uses: actions/checkout@v4
 
     #####################################################
-    # FRONTEND (Next.js)
+    # FRONTEND (Next.js SSR)
     #####################################################
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -29,12 +29,6 @@ jobs:
 
     - name: Build Frontend
       run: npm run build
-      working-directory: ./frontend
-
-    # Optional: Export if you're using static export (Next.js Out folder)
-    - name: Export Static Frontend
-      if: success()
-      run: npm run export
       working-directory: ./frontend
 
     #####################################################
@@ -51,15 +45,15 @@ jobs:
       working-directory: ./backend
 
     #####################################################
-    # ARTIFACT STORAGE
+    # ARTIFACT STORAGE (OPTIONAL)
     #####################################################
-    - name: Upload Frontend Artifact
+    - name: Upload Frontend Build
       uses: actions/upload-artifact@v4
       with:
         name: frontend-build
-        path: ./frontend/out
+        path: ./frontend/.next
 
-    - name: Upload Backend Artifact
+    - name: Upload Backend Build
       uses: actions/upload-artifact@v4
       with:
         name: backend-build
