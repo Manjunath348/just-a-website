@@ -1,9 +1,7 @@
-  name: Deploy Static Site to EC2 (Self-Hosted Runner)
+name: Deploy Fullstack (Next.js + Quarkus) to EC2
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
     branches: ["main"]
 
 jobs:
@@ -14,27 +12,65 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Prepare Static Files
-      run: |
-        rm -rf deploy
-        mkdir deploy
-        cp index.html deploy/ || true
-        cp onboarding.js deploy/ || true
-        cp test.js deploy/ || true
-        ls -l deploy
+    #####################################################
+    # FRONTEND (Next.js)
+    #####################################################
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
 
+    - name: Install Frontend Dependencies
+      run: npm install
+      working-directory: ./frontend
+
+    - name: Build Frontend
+      run: npm run build
+      working-directory: ./frontend
+
+    - name: Export Static Frontend
+      run: npm run export
+      working-directory: ./frontend
+
+    #####################################################
+    # BACKEND (Quarkus)
+    #####################################################
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Build Quarkus Backend
+      run: mvn package -DskipTests
+      working-directory: ./backend
+
+    #####################################################
+    # DEPLOY STATIC SITE + QUARKUS SERVICE
+    #####################################################
     - name: Add EC2 to Known Hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H 15.206.117.5 >> ~/.ssh/known_hosts
+      run: ssh-keyscan -H 3.110.154.138 >> ~/.ssh/known_hosts
 
-   - name: Reload NGINX on EC2
+    - name: Deploy Frontend (Static Next.js)
       run: |
-        ssh \
-          -i /home/ubuntu/.ssh/id_ed25519 \
-          -o StrictHostKeyChecking=no \
-          ubuntu@3.110.154.138 \
-          "sudo systemctl reload nginx"
+        scp -i /home/ubuntu/.ssh/id_ed25519 -r \
+          ./frontend/out/* \
+          ubuntu@3.110.154.138:/var/www/html/
 
-    - name: Print URL
-      run: echo "Site Live at:http://3.110.154.138/"
+    - name: Deploy Backend (Quarkus)
+      run: |
+        scp -i /home/ubuntu/.ssh/id_ed25519 -r \
+          ./backend/target/quarkus-app \
+          ubuntu@3.110.154.138:/opt/backend/
+
+    - name: Restart Backend + Reload NGINX
+      run: |
+        ssh -i /home/ubuntu/.ssh/id_ed25519 ubuntu@3.110.154.138 "
+          sudo systemctl restart backend || true
+          sudo systemctl reload nginx
+        "
+
+    - name: Print URLs
+      run: |
+        echo "Frontend: http://3.110.154.138/"
+        echo "Backend:  http://3.110.154.138:8080/hello"
