@@ -39,7 +39,9 @@ jobs:
 
 
     - name: Install Frontend Dependencies
-      run: npm install
+      run: |
+        npm config set registry https://registry.npmjs.org/
+        npm install
       working-directory: ./frontend
 
     - name: Build Frontend
