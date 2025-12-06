@@ -104,11 +104,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read Version
+      - name: Set Auto Version
         id: version
         run: |
-          test -f VERSION || (echo "VERSION file missing" && exit 1)
-          echo "version=$(cat VERSION | tr -d ' \n')" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+
 
       - name: Set Environment
         id: env
