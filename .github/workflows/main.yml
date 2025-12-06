@@ -45,7 +45,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: frontend/.next/
+          path: .next/
+          if-no-files-found: error
           retention-days: 14
 
 
@@ -118,6 +119,9 @@ jobs:
         run: |
           ENV=${{ steps.env.outputs.env }}
           VER=${{ steps.version.outputs.version }}
+          mkdir -p release/${ENV}
+          mv release/frontend release/${ENV}/frontend
+          mv release/backend release/${ENV}/backend
           zip -r multiplus-${ENV}-${VER}.zip release/
           echo "bundle=multiplus-${ENV}-${VER}.zip" >> $GITHUB_OUTPUT
 
