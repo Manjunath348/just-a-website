@@ -58,7 +58,7 @@ jobs:
 
 
 # =========================
-# 2. Backend CI (Java / Quarkus)
+# 2. Backend CI
 # =========================
   backend-ci:
     name: Backend CI (Java Quarkus)
@@ -91,7 +91,7 @@ jobs:
 
 
 # =========================
-# 3. Package Artifacts (STAGING / PROD)
+# 3. Package Artifacts
 # =========================
   package-artifacts:
     name: Package Release Artifacts
@@ -106,9 +106,7 @@ jobs:
 
       - name: Set Auto Version
         id: version
-        run: |
-          echo "version=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
-
+        run: echo "version=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
 
       - name: Set Environment
         id: env
@@ -130,6 +128,11 @@ jobs:
         with:
           name: backend-jar
           path: release/backend
+
+      - name: Verify artifacts exist
+        run: |
+          ls -la release/frontend || exit 1
+          ls -la release/backend  || exit 1
 
       - name: Create Release Bundle
         id: bundle
@@ -155,7 +158,49 @@ jobs:
 
 
 # =========================
-# 4. CI Status Summary
+# 4. Deploy to STAGING (AUTO from main)
+# =========================
+  deploy-staging:
+    name: Deploy to STAGING
+    runs-on: ubuntu-latest
+    needs: package-artifacts
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download STAGING bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: multiplus-release-staging
+
+      - name: Deploy to Staging Server
+        run: |
+          echo "✅ Deploying to STAGING server"
+          echo "➡ Here we will add real SSH deployment next"
+
+
+# =========================
+# 5. Deploy to PRODUCTION (ONLY from v* tag)
+# =========================
+  deploy-production:
+    name: Deploy to PRODUCTION
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download PRODUCTION bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: multiplus-release-production
+
+      - name: Deploy to Production Server
+        run: |
+          echo "✅ Deploying to PRODUCTION server"
+          echo "➡ Here we will add real SSH deployment next"
+
+
+# =========================
+# 6. CI Status Summary
 # =========================
   ci-status:
     name: CI Status Summary
@@ -164,14 +209,18 @@ jobs:
       - frontend-ci
       - backend-ci
       - package-artifacts
+      - deploy-staging
+      - deploy-production
     if: always()
 
     steps:
       - name: Summarize CI
         run: |
-          echo "Frontend:  ${{ needs.frontend-ci.result }}"
-          echo "Backend:   ${{ needs.backend-ci.result }}"
-          echo "Artifacts: ${{ needs.package-artifacts.result }}"
+          echo "Frontend:   ${{ needs.frontend-ci.result }}"
+          echo "Backend:    ${{ needs.backend-ci.result }}"
+          echo "Packaging:  ${{ needs.package-artifacts.result }}"
+          echo "Staging:    ${{ needs.deploy-staging.result }}"
+          echo "Production: ${{ needs.deploy-production.result }}"
           if [ "${{ needs.frontend-ci.result }}" = "success" ] && \
              [ "${{ needs.backend-ci.result }}" = "success" ] && \
              [ "${{ needs.package-artifacts.result }}" = "success" ]; then
@@ -182,7 +231,7 @@ jobs:
 
 
 # =========================
-# 5. Failure Notification
+# 7. Failure Notification
 # =========================
   notify-on-failure:
     name: Notify on Failure
@@ -192,4 +241,4 @@ jobs:
     steps:
       - name: Send Failure Notification
         run: |
-          echo "CI Failed for ${{ github.repository }}"
+          echo "❌ CI/CD Pipeline Failed for ${{ github.repository }}"
