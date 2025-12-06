@@ -36,12 +36,20 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: |
+          echo "Current directory:"
+          pwd
+
+          echo "Listing frontend directory:"
+          ls -la
+
           if [ -f package-lock.json ]; then
-            npm ci
+            echo "package-lock.json found. Running npm ci..."
+            npm ci --no-audit --no-fund
           elif [ -f package.json ]; then
-            npm install
+            echo "package-lock.json NOT found. Falling back to npm install..."
+            npm install --no-audit --no-fund
           else
-            echo "No package.json found in ./frontend. Cannot proceed."
+            echo "ERROR: No package.json found in ./frontend"
             exit 1
           fi
 
