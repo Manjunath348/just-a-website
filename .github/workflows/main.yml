@@ -47,6 +47,7 @@ jobs:
           name: frontend-build
           path: frontend/.next
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
 
 
