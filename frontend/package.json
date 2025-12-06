@@ -1,6 +1,7 @@
 {
   "name": "frontend",
   "scripts": {
+    "lint": "eslint .",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
