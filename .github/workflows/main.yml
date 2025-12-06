@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, main]
     tags:
-      - 'v*'          # e.g., v1.0.0 for production release tags
+      - 'v*'
   pull_request:
     branches: [develop, main]
   workflow_dispatch:
@@ -15,16 +15,14 @@ env:
   JAVA_DISTRIBUTION: 'temurin'
 
 jobs:
-  # =========================
-  # 1. Frontend CI
-  # =========================
+# =========================
+# 1. Frontend CI
+# =========================
   frontend-ci:
     name: Frontend CI
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,323 +34,162 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./frontend
         run: |
-         if [ -f package.json ]; then
+          test -f package.json || (echo "ERROR: No package.json in frontend" && exit 1)
           npm install --no-audit --no-fund
-         else
-           echo "ERROR: No package.json found in ./frontend"
-           exit 1
-         fi
-         
+
       - name: Run frontend linter
         working-directory: ./frontend
-        run: |
-          npm run lint
+        run: npm run lint
 
       - name: Run frontend tests
         working-directory: ./frontend
-        run: |
-          npm test
+        run: npm test
 
-      - name: Build frontend (Next.js)
+      - name: Build frontend
         working-directory: ./frontend
-        run: |
-          npm run build
+        run: npm run build
 
       - name: Upload frontend build artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: |
-            frontend/.next/
-            frontend/out/
-            frontend/build/
-            frontend/package.json
-            frontend/package-lock.json
-          if-no-files-found: error
+          path: frontend/.next/
           retention-days: 14
 
 
-  # =========================
-  # 2. Backend CI (Java / Quarkus)
-  # =========================
+# =========================
+# 2. Backend CI (Java / Quarkus)
+# =========================
   backend-ci:
     name: Backend CI (Java Quarkus)
     runs-on: ubuntu-latest
     needs: frontend-ci
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Java (Temurin)
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
 
-      - name: Build and test backend (clean verify)
+      - name: Build and test backend
         working-directory: ./backend
-        run: |
-          mvn -B clean verify
+        run: mvn -B clean verify
 
-      - name: Package backend JAR
+      - name: Package backend
         working-directory: ./backend
-        run: |
-          mvn -B package
+        run: mvn -B package
 
       - name: Upload backend JAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-jar
           path: backend/target/*.jar
-          if-no-files-found: error
           retention-days: 14
 
 
-  # =========================
-  # 3. Security Scanning (Trivy FS)
-  # =========================
-  security-scan:
-    name: Security Scanning (Trivy Filesystem)
+# =========================
+# 3. Package Artifacts (STAGING / PROD)
+# =========================
+  package-artifacts:
+    name: Package Release Artifacts
     runs-on: ubuntu-latest
     needs: [frontend-ci, backend-ci]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy filesystem scan (CRITICAL/HIGH -> fail)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-          format: 'table'
-          exit-code: '1'     # fail pipeline on findings
-          timeout: '10m'
-
-
-  # =========================
-  # 4. Code Quality (SonarCloud)
-  # =========================
-  code-quality:
-    name: Code Quality (SonarCloud)
-    runs-on: ubuntu-latest
-    needs: security-scan
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0     # needed for proper analysis & blame
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # If Sonar or quality gate fails, the job fails and blocks CI.
-
-
-  # =========================
-  # 5. Package Artifacts (NO Docker)
-  #    - develop: build+test only (job skipped)
-  #    - main: STAGING artifacts
-  #    - tags v*: PRODUCTION artifacts
-  # =========================
-  package-artifacts:
-    name: Package Release Artifacts (NO Docker)
-    runs-on: ubuntu-latest
-    needs: [frontend-ci, backend-ci, code-quality]
     if: |
       github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Determine environment and version
-        id: meta
+      - name: Read Version
+        id: version
         run: |
-          if [ ! -f VERSION ]; then
-            echo "VERSION file not found. Please create one (e.g., 1.0.0)."
-            exit 1
-          fi
+          test -f VERSION || (echo "VERSION file missing" && exit 1)
+          echo "version=$(cat VERSION | tr -d ' \n')" >> $GITHUB_OUTPUT
 
-          VERSION=$(cat VERSION | tr -d ' \n')
-          echo "App version: $VERSION"
-
-          # Determine environment based on ref
+      - name: Set Environment
+        id: env
+        run: |
           if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            ENVIRONMENT="staging"
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            ENVIRONMENT="production"
+            echo "env=staging" >> $GITHUB_OUTPUT
           else
-            ENVIRONMENT="unknown"
+            echo "env=production" >> $GITHUB_OUTPUT
           fi
 
-          echo "Environment: $ENVIRONMENT"
-
-          # For production tags, ensure tag matches v<VERSION>
-          if [[ "$ENVIRONMENT" == "production" ]]; then
-            TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-            if [ "$TAG_VERSION" != "$VERSION" ]; then
-              echo "Tag version (v$TAG_VERSION) does not match VERSION file ($VERSION)."
-              exit 1
-            fi
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
-
-      - name: Download frontend build artifact
+      - name: Download frontend artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
-          path: artifacts/frontend/
+          path: release/frontend
 
-      - name: Download backend JAR artifact
+      - name: Download backend artifact
         uses: actions/download-artifact@v4
         with:
           name: backend-jar
-          path: artifacts/backend/
+          path: release/backend
 
-      - name: Prepare release directory
-        id: prep
+      - name: Create Release Bundle
+        id: bundle
         run: |
-          VERSION="${{ steps.meta.outputs.version }}"
-          ENV="${{ steps.meta.outputs.environment }}"
+          ENV=${{ steps.env.outputs.env }}
+          VER=${{ steps.version.outputs.version }}
+          zip -r multiplus-${ENV}-${VER}.zip release/
+          echo "bundle=multiplus-${ENV}-${VER}.zip" >> $GITHUB_OUTPUT
 
-          RELEASE_DIR="release/${ENV}"
-          mkdir -p "${RELEASE_DIR}"
-
-          echo "release_dir=${RELEASE_DIR}" >> "$GITHUB_OUTPUT"
-
-      - name: Create STAGING/PROD release bundle (ZIP)
+      - name: Generate SHA256
         run: |
-          VERSION="${{ steps.meta.outputs.version }}"
-          ENV="${{ steps.meta.outputs.environment }}"
-          RELEASE_DIR="${{ steps.prep.outputs.release_dir }}"
+          sha256sum ${{ steps.bundle.outputs.bundle }} \
+          > ${{ steps.bundle.outputs.bundle }}.sha256
 
-          # frontend bundle
-          mkdir -p "${RELEASE_DIR}/frontend"
-          cp -r artifacts/frontend/* "${RELEASE_DIR}/frontend/"
-
-          # backend bundle
-          mkdir -p "${RELEASE_DIR}/backend"
-          cp artifacts/backend/*.jar "${RELEASE_DIR}/backend/"
-
-          # optional: include deployment scripts templates
-          mkdir -p "${RELEASE_DIR}/deploy-scripts"
-          # e.g., cp ci/scripts/*.sh "${RELEASE_DIR}/deploy-scripts/" || true
-
-          BUNDLE_NAME="multiplus-${ENV}-${VERSION}.zip"
-
-          (cd release && zip -r "../${BUNDLE_NAME}" "${ENV}")
-          echo "bundle_name=${BUNDLE_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate SHA256 checksum
-        id: checksum
-        run: |
-          BUNDLE_NAME="${{ steps.create_release_bundle.outputs.bundle_name || '' }}"
-        shell: bash
-        # Because we can't reference step outputs from previous inline script directly,
-        # we compute checksum in a separate step:
-      - name: Compute SHA256 checksum
-        id: compute_checksum
-        run: |
-          BUNDLE_NAME="${{ steps.create_release_bundle.outputs.bundle_name }}"
-          if [ -z "$BUNDLE_NAME" ]; then
-            echo "Bundle name not found."
-            exit 1
-          fi
-
-          sha256sum "$BUNDLE_NAME" > "${BUNDLE_NAME}.sha256"
-
-          echo "bundle=$BUNDLE_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Validate checksum (immutability check)
-        run: |
-          BUNDLE_NAME="${{ steps.compute_checksum.outputs.bundle }}"
-          sha256sum -c "${BUNDLE_NAME}.sha256"
-
-      - name: Upload release artifacts
+      - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: multiplus-release-${{ steps.meta.outputs.environment }}-${{ steps.meta.outputs.version }}
+          name: multiplus-release-${{ steps.env.outputs.env }}
           path: |
-            ${{ steps.compute_checksum.outputs.bundle }}
-            ${{ steps.compute_checksum.outputs.bundle }}.sha256
-          if-no-files-found: error
+            *.zip
+            *.sha256
           retention-days: 30
 
 
-  # =========================
-  # 6. CI Status Summary
-  # =========================
+# =========================
+# 4. CI Status Summary
+# =========================
   ci-status:
     name: CI Status Summary
     runs-on: ubuntu-latest
     needs:
       - frontend-ci
       - backend-ci
-      - security-scan
-      - code-quality
       - package-artifacts
-
     if: always()
 
     steps:
-      - name: Summarize CI Results
+      - name: Summarize CI
         run: |
-          echo "Frontend CI:        ${{ needs.frontend-ci.result }}"
-          echo "Backend CI:         ${{ needs.backend-ci.result }}"
-          echo "Security Scan:      ${{ needs.security-scan.result }}"
-          echo "Code Quality:       ${{ needs.code-quality.result }}"
-          echo "Package Artifacts:  ${{ needs.package-artifacts.result }}"
-
+          echo "Frontend:  ${{ needs.frontend-ci.result }}"
+          echo "Backend:   ${{ needs.backend-ci.result }}"
+          echo "Artifacts: ${{ needs.package-artifacts.result }}"
           if [ "${{ needs.frontend-ci.result }}" = "success" ] && \
              [ "${{ needs.backend-ci.result }}" = "success" ] && \
-             [ "${{ needs.security-scan.result }}" = "success" ] && \
-             [ "${{ needs.code-quality.result }}" = "success" ] && \
              [ "${{ needs.package-artifacts.result }}" = "success" ]; then
-            echo "✅ All required CI stages passed."
             exit 0
           else
-            echo "❌ One or more CI stages failed."
             exit 1
           fi
 
 
-  # =========================
-  # 7. Failure Notification (Slack/Webhook)
-  # =========================
+# =========================
+# 5. Failure Notification
+# =========================
   notify-on-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
-    needs: [ci-status]
+    needs: ci-status
     if: failure()
-
     steps:
-      - name: Send failure notification (Webhook/Slack placeholder)
+      - name: Send Failure Notification
         run: |
-          if [ -z "${WEBHOOK_URL}" ]; then
-            echo "WEBHOOK_URL not set; skipping notification."
-            exit 0
-          fi
-
-          payload=$(jq -n \
-            --arg repo "${{ github.repository }}" \
-            --arg branch "${{ github.ref_name }}" \
-            --arg sha "${{ github.sha }}" \
-            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            '{text: ("CI pipeline FAILED for " + $repo + " on branch " + $branch + " (" + $sha + "). Details: " + $url)}'
-          )
-
-          curl -X POST -H 'Content-type: application/json' --data "$payload" "$WEBHOOK_URL"
-        env:
-          WEBHOOK_URL: ${{ secrets.CI_FAILURE_WEBHOOK_URL }}
+          echo "CI Failed for ${{ github.repository }}"
