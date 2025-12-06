@@ -41,6 +41,19 @@ jobs:
           npm run lint
           npm test
           npm run build
+      - name: FULL WORKSPACE DEBUG (FINAL)
+        run: |
+          echo "=========== ROOT ==========="
+          pwd
+          ls -lah
+          echo "=========== FIND .next ==========="
+          find . -type d -name ".next" || true
+          echo "=========== FIND out =========="
+          find . -type d -name "out" || true
+          echo "=========== FIND dist =========="
+          find . -type d -name "dist" || true
+
+          
 
       - uses: actions/upload-artifact@v4
         with:
