@@ -1,0 +1,74 @@
+name: Deploy to QA
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [qa, release/*]
+    types:
+      - completed
+
+jobs:
+  deploy-qa:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy QA
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          run-id: ${{ github.event.workflow_run.id }}
+          path: frontend-build
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          run-id: ${{ github.event.workflow_run.id }}
+          path: backend-build
+
+      # Backend QA
+      - name: Deploy backend to QA
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.QA_BACKEND_HOST }}
+          username: ${{ secrets.QA_BACKEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "backend-build/*.jar"
+          target: "/opt/multiplus/backend/"
+
+      - name: Restart backend QA
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.QA_BACKEND_HOST }}
+          username: ${{ secrets.QA_BACKEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo systemctl stop multiplus-backend-qa || true
+            cd /opt/multiplus/database && ./migrate-qa.sh || true
+            sudo systemctl start multiplus-backend-qa
+            sleep 10
+            curl -f http://localhost:8080/q/health
+
+      # Frontend QA
+      - name: Deploy frontend to QA
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.QA_FRONTEND_HOST }}
+          username: ${{ secrets.QA_FRONTEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "frontend-build/*"
+          target: "/var/www/multiplus-qa/"
+
+      - name: Reload frontend QA
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.QA_FRONTEND_HOST }}
+          username: ${{ secrets.QA_FRONTEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo systemctl restart multiplus-frontend-qa || sudo systemctl reload nginx
