@@ -1,0 +1,74 @@
+name: Deploy to Dev
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [develop]
+    types:
+      - completed
+
+jobs:
+  deploy-dev:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Deploy Dev
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          run-id: ${{ github.event.workflow_run.id }}
+          path: frontend-build
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          run-id: ${{ github.event.workflow_run.id }}
+          path: backend-build
+
+      # Backend Dev Deploy
+      - name: Copy backend jar to Dev server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_BACKEND_HOST }}
+          username: ${{ secrets.DEV_BACKEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "backend-build/*.jar"
+          target: "/opt/multiplus/backend/"
+
+      - name: Restart backend service & migrate DB (Dev)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_BACKEND_HOST }}
+          username: ${{ secrets.DEV_BACKEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo systemctl stop multiplus-backend-dev || true
+            cd /opt/multiplus/database && ./migrate-dev.sh || true
+            sudo systemctl start multiplus-backend-dev
+            sleep 10
+            curl -f http://localhost:8080/q/health
+
+      # Frontend Dev Deploy
+      - name: Sync frontend build to Dev server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_FRONTEND_HOST }}
+          username: ${{ secrets.DEV_FRONTEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "frontend-build/*"
+          target: "/var/www/multiplus-dev/"
+
+      - name: Reload frontend (Dev)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_FRONTEND_HOST }}
+          username: ${{ secrets.DEV_FRONTEND_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            sudo systemctl restart multiplus-frontend-dev || sudo systemctl reload nginx
